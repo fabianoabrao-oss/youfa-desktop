@@ -1,0 +1,51 @@
+YouFA 2.2.0
+Seu organizador de faixas de áudio
+by Fabiano Abrão
+
+Aplicativo independente. Não é afiliado, patrocinado nem aprovado pelo YouTube,
+Google ou AudD. Use somente conteúdo próprio, autorizado ou cujo download seja
+permitido pelos termos aplicáveis e pela legislação.
+
+COMPONENTES E CRÉDITOS
+
+Python — Python Software Foundation License
+https://www.python.org/psf/
+https://docs.python.org/3/license.html
+
+yt-dlp — The Unlicense
+https://github.com/yt-dlp/yt-dlp
+https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE
+
+yt-dlp-ejs — The Unlicense; inclui componentes MIT e ISC
+https://github.com/yt-dlp/ejs
+
+FFmpeg — compilação GPL versão 3
+https://ffmpeg.org/
+https://ffmpeg.org/legal.html
+Código-fonte e informações da compilação: https://www.gyan.dev/ffmpeg/builds/
+
+Node.js — licença MIT e licenças dos componentes incluídos
+https://nodejs.org/
+https://github.com/nodejs/node/blob/main/LICENSE
+
+NumPy — licença BSD de 3 cláusulas
+https://numpy.org/
+https://github.com/numpy/numpy/blob/main/LICENSE.txt
+
+Pillow — licença HPND
+https://python-pillow.github.io/
+https://github.com/python-pillow/Pillow/blob/main/LICENSE
+
+PyInstaller — GPL com exceção para distribuição dos executáveis gerados
+https://pyinstaller.org/
+https://github.com/pyinstaller/pyinstaller/blob/develop/COPYING.txt
+
+Inno Setup — usado para produzir o instalador
+https://jrsoftware.org/isinfo.php
+
+AudD — serviço externo opcional de reconhecimento musical
+https://audd.io/
+https://docs.audd.io/
+
+As marcas e nomes citados pertencem aos respectivos titulares. Os componentes
+permanecem sujeitos às suas próprias licenças e termos.

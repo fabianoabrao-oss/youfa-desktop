@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build and installers
+build/
+dist/
+installer-dist/
+runtime/
+*.exe
+*.msi
+
+# Local validation material
+tag-test/
+test-output/
+test-output-2/
+test-audd-example.mp3
+
+# Local configuration and OS metadata
+.claude/
+CLAUDE.md
+desktop.ini
+Thumbs.db
+*.log
+*.bin
+
+# Legacy build definition
+YouTubeAudioOrganizer.spec
