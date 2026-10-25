@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 import yt_dlp
 
 APP_NAME = "YouFA"
-APP_VERSION = "2.2.3"
+APP_VERSION = "2.2.4"
 AUDD_SIGNUP_URL = "https://dashboard.audd.io/"
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".flac", ".wav", ".opus"}
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "YouTubeAudioOrganizer" / "audd_token.bin"
@@ -160,12 +160,14 @@ def audd_request(token: str, audio: Path | None = None, url: str | None = None) 
 
 
 class QueueLogger:
-    def __init__(self, emit): self.emit = emit
+    def __init__(self, emit): self.emit = emit; self.errors = set()
     def debug(self, message):
         if not str(message).startswith("[debug]"): self.emit("log", str(message))
     def info(self, message): self.emit("log", str(message))
     def warning(self, message): self.emit("log", f"Aviso: {message}")
-    def error(self, message): self.emit("log", f"Erro: {message}")
+    def error(self, message):
+        self.errors.add(str(message))
+        self.emit("log", f"Erro: {message}")
 
 
 class AudioApp(tk.Tk):
@@ -337,10 +339,14 @@ class AudioApp(tk.Tk):
     def _cancel(self): self.cancel_event.set(); self.status_var.set("Cancelando..."); self.cancel_button.configure(state="disabled")
     def _finish(self, success: bool):
         self.start_button.configure(state="normal"); self.cancel_button.configure(state="disabled")
-        self.status_var.set("Concluído" if success else ("Cancelado" if self.cancel_event.is_set() else "Falha — consulte o log"))
-        if success: self.progress_var.set(100); messagebox.showinfo(APP_NAME, "Processamento concluído.")
+        warnings = success and getattr(self, "_download_warnings", False)
+        self.status_var.set(("Concluído com avisos" if warnings else "Concluído") if success else ("Cancelado" if self.cancel_event.is_set() else "Falha — consulte o log"))
+        if success:
+            self.progress_var.set(100)
+            if warnings: messagebox.showwarning(APP_NAME, "Processamento concluído com falhas em alguns itens. Os arquivos disponíveis foram processados. Consulte o log.")
+            else: messagebox.showinfo(APP_NAME, "Processamento concluído.")
     def _progress_hook(self, data):
-        if self.cancel_event.is_set(): raise yt_dlp.utils.DownloadError("Operação cancelada pelo usuário")
+        if self.cancel_event.is_set(): raise yt_dlp.utils.DownloadCancelled("Operação cancelada pelo usuário")
         if data.get("status") == "downloading":
             total = data.get("total_bytes") or data.get("total_bytes_estimate")
             if total: self._emit("progress", min(85, data.get("downloaded_bytes", 0) * 85 / total))
@@ -348,23 +354,30 @@ class AudioApp(tk.Tk):
         elif data.get("status") == "finished": self._emit("progress", 88); self._emit("status", "Convertendo o áudio...")
 
     def _download(self, url, folder, audio_format, quality, split_mode, allow_playlist, identify):
+        self._download_warnings = False
         self._track_metadata = {}
         self._split_outputs = set()
         success = False; before = {p.resolve() for p in folder.rglob("*") if p.is_file()}
         ffmpeg, node = resource_path("ffmpeg.exe"), resource_path("node.exe")
         quality_map = {"Melhor": "0", "Alta": "2", "Média": "5", "Compacta": "7"}
         opts = {"format": "bestaudio/best", "outtmpl": {"default": str(folder / "%(title).180B [%(id)s].%(ext)s"), "chapter": str(folder / "%(section_number)02d - %(section_title).150B [%(id)s].%(ext)s")}, "windowsfilenames": True, "noplaylist": not allow_playlist, "continuedl": True, "overwrites": False, "progress_hooks": [self._progress_hook], "logger": QueueLogger(self._emit), "ffmpeg_location": str(ffmpeg.parent), "js_runtimes": {"node": {"path": str(node)}}, "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": audio_format, "preferredquality": quality_map[quality]}, {"key": "FFmpegMetadata", "add_metadata": True}], "quiet": True}
+        opts.update(ignoreerrors=bool(allow_playlist), match_filter=self._download_filter)
         try:
             if not ffmpeg.exists() or not node.exists(): raise RuntimeError("Componentes internos não encontrados.")
             self._emit("log", f"Destino: {folder}")
             with yt_dlp.YoutubeDL(opts) as ydl: info = ydl.extract_info(url, download=True)
             if self.cancel_event.is_set(): raise RuntimeError("Operação cancelada")
+            self._download_warnings = bool(opts["logger"].errors)
+            if self._download_warnings:
+                self._emit("log", "Alguns itens falharam ou estão indisponíveis. Continuando com os arquivos disponíveis; detalhes acima.")
             files = self._new_audio_files(folder, before)
             # A preserved full file can be reused on a later attempt with the same URL.
             source_ids = {str(entry.get("id")) for entry in self._flatten_info(info) if entry.get("id")}
             for path in folder.iterdir():
                 if path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS and any(path.stem.endswith(f"[{video_id}]") for video_id in source_ids):
                     if path.resolve() not in files: files.append(path.resolve())
+            if not files:
+                raise RuntimeError("Nenhum arquivo de áudio disponível para processar. Confira os erros dos itens acima.")
             if split_mode == "Separar por faixas":
                 separated = []
                 for audio in files:
@@ -386,7 +399,7 @@ class AudioApp(tk.Tk):
                 if rows:
                     request = {"rows": rows, "approved": False, "event": threading.Event()}; self._emit("review", request); request["event"].wait()
                     if request["approved"]: self._apply_names(rows, ffmpeg)
-            self._emit("log", "Concluído com sucesso."); success = True
+            self._emit("log", "Concluído com avisos: os itens com falha não foram concluídos; confira o log." if self._download_warnings else "Concluído com sucesso."); success = True
         except Exception as exc: self._emit("log", "Operação cancelada." if self.cancel_event.is_set() else f"Falha: {exc}")
         finally: self._emit("done", success)
 
@@ -394,12 +407,18 @@ class AudioApp(tk.Tk):
     def _new_audio_files(folder, before):
         return sorted([p.resolve() for p in folder.rglob("*") if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS and p.resolve() not in before], key=lambda p: str(p).lower())
     def _flatten_info(self, info):
-        if info.get("entries"):
+        if not isinstance(info, dict): return []
+        if "entries" in info:
             result = []
-            for entry in info["entries"]:
+            for entry in info["entries"] or []:
                 if entry: result.extend(self._flatten_info(entry))
             return result
         return [info]
+
+    def _download_filter(self, info, *, incomplete=False):
+        if self.cancel_event.is_set():
+            raise yt_dlp.utils.DownloadCancelled("Operação cancelada pelo usuário")
+        return None
     def _entry_for_file(self, path, info):
         entries = self._flatten_info(info); match_id = re.search(r"\[([\w-]{6,})\](?=\.[^.]+$)", path.name)
         entry = next((x for x in entries if match_id and x.get("id") == match_id.group(1)), entries[0] if len(entries) == 1 else None)

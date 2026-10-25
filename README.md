@@ -1,10 +1,12 @@
-# YouFA 2.2.3
+# YouFA 2.2.4
 
 Seu organizador de faixas de áudio — by Fabiano Abrão.
 
+Playlists: itens indisponíveis ou com falha são registrados no log e não interrompem os demais. O resultado mostra avisos quando houver falhas; cancelar continua interrompendo a operação.
+
 ## Download para Windows
 
-**[Baixar o instalador YouFA 2.2.3 para Windows](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.3/YouFA-Setup-2.2.3.exe)**
+**[Baixar o instalador YouFA 2.2.4 para Windows](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.4/YouFA-Setup-2.2.4.exe)**
 
 [Ver todas as versões e downloads](https://github.com/fabianoabrao-oss/youfa-desktop/releases)
 
@@ -18,7 +20,7 @@ O instalador é para Windows 64 bits. Como ainda não possui assinatura digital
 comercial, o Windows pode exibir um aviso do SmartScreen. O checksum SHA-256
 está disponível na [página de versões](https://github.com/fabianoabrao-oss/youfa-desktop/releases).
 
-O instalador 2.2.3 atualiza a versão anterior e preserva o token AudD protegido
+O instalador 2.2.4 atualiza a versão anterior e preserva o token AudD protegido
 no perfil do usuário do Windows.
 
 Aplicativo local para Windows que extrai áudio de URLs do YouTube para uma pasta escolhida pelo usuário.

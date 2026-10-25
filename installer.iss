@@ -1,5 +1,5 @@
 #define MyAppName "YouFA"
-#define MyAppVersion "2.2.3"
+#define MyAppVersion "2.2.4"
 #define MyAppPublisher "Fabiano Abrão"
 #define MyAppExeName "YouFA.exe"
 
@@ -13,14 +13,14 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=installer-dist
-OutputBaseFilename=YouFA-Setup-2.2.3
+OutputBaseFilename=YouFA-Setup-2.2.4
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-VersionInfoVersion=2.2.3.0
+VersionInfoVersion=2.2.4.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=Instalador do {#MyAppName}
 
