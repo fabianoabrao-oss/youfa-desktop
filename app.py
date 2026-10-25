@@ -22,7 +22,7 @@ import yt_dlp
 import numpy as np
 
 APP_NAME = "YouFA"
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.2.2"
 AUDD_SIGNUP_URL = "https://dashboard.audd.io/"
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".flac", ".wav", ".opus"}
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "YouTubeAudioOrganizer" / "audd_token.bin"
@@ -349,6 +349,8 @@ class AudioApp(tk.Tk):
         elif data.get("status") == "finished": self._emit("progress", 88); self._emit("status", "Convertendo o áudio...")
 
     def _download(self, url, folder, audio_format, quality, split_mode, allow_playlist, identify):
+        self._track_metadata = {}
+        self._split_outputs = set()
         success = False; before = {p.resolve() for p in folder.rglob("*") if p.is_file()}
         ffmpeg, node = resource_path("ffmpeg.exe"), resource_path("node.exe")
         quality_map = {"Melhor": "0", "Alta": "2", "Média": "5", "Compacta": "7"}
@@ -362,8 +364,14 @@ class AudioApp(tk.Tk):
             if split_mode == "Separar por faixas":
                 separated = []
                 for audio in files:
-                    tracks = self._split_acoustically(audio, ffmpeg)
+                    entry = self._entry_for_file(audio, info)
+                    if entry and entry.get("chapters"):
+                        tracks = self._split_chapters(audio, ffmpeg, entry)
+                    else:
+                        self._emit("log", "Sem capítulos: separação acústica experimental; nomes não serão inferidos pela ordem.")
+                        tracks = self._split_acoustically(audio, ffmpeg)
                     if tracks:
+                        self._split_outputs.update(tracks)
                         separated.extend(tracks)
                     else:
                         separated.append(audio)
@@ -388,20 +396,65 @@ class AudioApp(tk.Tk):
                 if entry: result.extend(self._flatten_info(entry))
             return result
         return [info]
-    def _free_metadata(self, path, info):
+    def _entry_for_file(self, path, info):
         entries = self._flatten_info(info); match_id = re.search(r"\[([\w-]{6,})\](?=\.[^.]+$)", path.name)
         entry = next((x for x in entries if match_id and x.get("id") == match_id.group(1)), entries[0] if len(entries) == 1 else None)
+        return entry
+
+    def _free_metadata(self, path, info):
+        if path in getattr(self, "_track_metadata", {}):
+            return self._track_metadata[path]
+        if path in getattr(self, "_split_outputs", set()):
+            return None
+        entry = self._entry_for_file(path, info)
         if not entry: return split_artist_title(path.stem)
-        chapter_match = re.match(r"(\d{1,3})\s*-", path.name)
-        if chapter_match and entry.get("chapters"):
-            index = int(chapter_match.group(1)) - 1
-            if 0 <= index < len(entry["chapters"]):
-                parsed = split_artist_title(entry["chapters"][index].get("title", ""))
-                if parsed: return parsed
         artist = entry.get("artist") or (", ".join(entry.get("artists") or []) if entry.get("artists") else None)
         title = entry.get("track") or entry.get("alt_title")
         if artist and title: return str(artist), str(title)
         return split_artist_title(entry.get("title", "")) or split_artist_title(path.stem)
+
+    def _split_chapters(self, audio, ffmpeg, entry):
+        """Use source timestamps, never acoustic segment indexes, for chapter labels."""
+        created = []
+        try:
+            duration = self._duration(audio, ffmpeg)
+            if not duration: raise ValueError("Duração do áudio indisponível")
+            chapters = entry["chapters"]
+            spans = []
+            cursor = 0.0
+            for chapter in chapters:
+                start = float(chapter["start_time"])
+                end = float(chapter["end_time"])
+                if not (abs(start - cursor) <= 1.0 and start < end <= duration + 1.0):
+                    raise ValueError("Capítulos sobrepostos, incompletos ou fora da duração")
+                spans.append((cursor, min(end, duration), chapter.get("title") or ""))
+                cursor = min(end, duration)
+            if len(spans) < 2 or abs(cursor - duration) > 1.0:
+                raise ValueError("Capítulos não cobrem o áudio completo")
+            spans[-1] = (spans[-1][0], duration, spans[-1][2])
+            target = audio.parent / f"{safe_part(audio.stem, 140)} - faixas"
+            target.mkdir(exist_ok=True)
+            # A fresh directory prevents overwriting tracks from an earlier run.
+            target = target / uuid.uuid4().hex[:8]
+            target.mkdir()
+            for index, (start, end, title) in enumerate(spans, 1):
+                if self.cancel_event.is_set(): raise RuntimeError("Operação cancelada")
+                dest = target / f"{index:02d} - {safe_part(title or 'faixa', 130)}{audio.suffix.lower()}"
+                subprocess.run([str(ffmpeg), "-y", "-hide_banner", "-loglevel", "error", "-ss", str(start), "-i", str(audio), "-t", str(end - start), "-map", "0:a:0", "-c", "copy", str(dest)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                created.append(dest.resolve())
+                # Chapter titles may be "song – artist", "artist – song", or medleys.
+                # Preserve their text instead of guessing the ordering of the tags.
+                self._track_metadata[dest.resolve()] = (str(entry.get("artist") or ""), title) if title else None
+                self._emit("log", f"Capítulo {index:02d}: {start:.3f}–{end:.3f}s — {title or 'Sem título'}")
+        except Exception as exc:
+            for path in created:
+                path.unlink(missing_ok=True)
+                self._track_metadata.pop(path, None)
+            self._emit("log", f"Separação por capítulos falhou: {exc}; arquivo inteiro preservado.")
+            return []
+        audio.unlink()
+        self._emit("log", f"{len(created)} faixas separadas pelos horários dos capítulos.")
+        return created
     def _duration(self, path, ffmpeg):
         result = subprocess.run([str(ffmpeg), "-hide_banner", "-i", str(path)], capture_output=True, text=True, errors="replace", creationflags=subprocess.CREATE_NO_WINDOW)
         match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
@@ -431,12 +484,13 @@ class AudioApp(tk.Tk):
         for index, row in enumerate(rows, 1):
             source = Path(row["path"])
             if not source.exists(): continue
-            artist, title = safe_part(row["artist"]), safe_part(row["title"], 130)
+            artist, title = safe_part(row["artist"]) if row["artist"] else "", safe_part(row["title"], 130)
             number_match = re.match(r"(\d{1,3})", source.name); number = int(number_match.group(1)) if number_match else index
             temp = source.with_name(f".tagging-{uuid.uuid4().hex}{source.suffix}")
             subprocess.run([str(ffmpeg), "-y", "-hide_banner", "-loglevel", "error", "-i", str(source), "-map", "0:a:0", "-c", "copy", "-metadata", f"artist={row['artist']}", "-metadata", f"title={row['title']}", "-metadata", f"track={number}", str(temp)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            os.replace(temp, source); target = source.with_name(f"{number:02d} - {artist} - {title}{source.suffix.lower()}"); suffix = 2
-            while target.exists() and target != source: target = source.with_name(f"{number:02d} - {artist} - {title} ({suffix}){source.suffix.lower()}"); suffix += 1
+            label = f"{artist} - {title}" if artist else title
+            os.replace(temp, source); target = source.with_name(f"{number:02d} - {label}{source.suffix.lower()}"); suffix = 2
+            while target.exists() and target != source: target = source.with_name(f"{number:02d} - {label} ({suffix}){source.suffix.lower()}"); suffix += 1
             if target != source: source.rename(target)
             self._emit("log", f"Salvo: {target.name}")
     def _acoustic_features(self, audio, ffmpeg):
