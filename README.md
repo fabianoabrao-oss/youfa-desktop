@@ -1,14 +1,17 @@
-# YouFA 2.2
+# YouFA 2.2.1
 
 Seu organizador de faixas de áudio — by Fabiano Abrão.
 
 ## Download para Windows
 
-**[Baixar o instalador YouFA 2.2.0](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.0/YouFA-Setup-2.2.0.exe)**
+**[Baixar o instalador YouFA 2.2.1](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.1/YouFA-Setup-2.2.1.exe)**
 
 O instalador é para Windows 64 bits. Como ainda não possui assinatura digital
 comercial, o Windows pode exibir um aviso do SmartScreen. O checksum SHA-256
-está disponível na [página da versão](https://github.com/fabianoabrao-oss/youfa-desktop/releases/tag/v2.2.0).
+está disponível na [página de versões](https://github.com/fabianoabrao-oss/youfa-desktop/releases).
+
+O instalador 2.2.1 atualiza a versão anterior e preserva o token AudD protegido
+no perfil do usuário do Windows.
 
 Aplicativo local para Windows que extrai áudio de URLs do YouTube para uma pasta escolhida pelo usuário.
 
@@ -58,8 +61,10 @@ python -m venv .venv
 ```
 
 O script obtém o FFmpeg pelo pacote `imageio-ffmpeg`, localiza o Node.js no
-`PATH` e gera `dist\YouFA.exe`. Os binários e artefatos de build não são
-versionados.
+`PATH` e gera `dist\YouFA\YouFA.exe` com as dependências na mesma pasta. O modo
+`onedir` evita depender da extração temporária do PyInstaller durante a execução,
+mantendo disponíveis os certificados HTTPS usados pelo yt-dlp. Os binários e
+artefatos de build não são versionados.
 
 Para gerar o instalador, abra `installer.iss` no Inno Setup depois do build.
 

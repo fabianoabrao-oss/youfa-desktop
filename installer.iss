@@ -1,5 +1,5 @@
 #define MyAppName "YouFA"
-#define MyAppVersion "2.2.0"
+#define MyAppVersion "2.2.1"
 #define MyAppPublisher "Fabiano Abrão"
 #define MyAppExeName "YouFA.exe"
 
@@ -13,14 +13,14 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=installer-dist
-OutputBaseFilename=YouFA-Setup-2.2.0
+OutputBaseFilename=YouFA-Setup-2.2.1
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-VersionInfoVersion=2.2.0.0
+VersionInfoVersion=2.2.1.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=Instalador do {#MyAppName}
 
@@ -28,7 +28,7 @@ VersionInfoDescription=Instalador do {#MyAppName}
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Files]
-Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\YouFA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "CREDITS.txt"; DestDir: "{app}"; Flags: ignoreversion
 

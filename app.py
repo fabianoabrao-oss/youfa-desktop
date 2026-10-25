@@ -22,7 +22,7 @@ import yt_dlp
 import numpy as np
 
 APP_NAME = "YouFA"
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.2.1"
 AUDD_SIGNUP_URL = "https://dashboard.audd.io/"
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".flac", ".wav", ".opus"}
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "YouTubeAudioOrganizer" / "audd_token.bin"
@@ -43,6 +43,26 @@ def valid_youtube_url(value: str) -> bool:
         return parsed.scheme in {"http", "https"} and (
             host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com"))
     except ValueError:
+        return False
+
+
+def download_smoke_test(url: str) -> bool:
+    """Valida rede, certificados e extração sem baixar o arquivo de mídia."""
+    if not valid_youtube_url(url):
+        return False
+    node = resource_path("node.exe")
+    opts = {
+        "skip_download": True,
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "js_runtimes": {"node": {"path": str(node)}},
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        return bool(info and info.get("id"))
+    except Exception:
         return False
 
 
@@ -493,4 +513,7 @@ class AudioApp(tk.Tk):
         return created
 
 
-if __name__ == "__main__": AudioApp().mainloop()
+if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--smoke-test":
+        raise SystemExit(0 if download_smoke_test(sys.argv[2]) else 1)
+    AudioApp().mainloop()
