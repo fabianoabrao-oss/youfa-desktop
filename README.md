@@ -1,12 +1,14 @@
-# YouFA 2.2.2
+# YouFA 2.2.3
 
 Seu organizador de faixas de áudio — by Fabiano Abrão.
 
 ## Download para Windows
 
-**[Baixar o instalador YouFA 2.2.2 para Windows](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.2/YouFA-Setup-2.2.2.exe)**
+**[Baixar o instalador YouFA 2.2.3 para Windows](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.3/YouFA-Setup-2.2.3.exe)**
 
 [Ver todas as versões e downloads](https://github.com/fabianoabrao-oss/youfa-desktop/releases)
+
+Sem capítulos: somente pausas de pelo menos 0,8 segundo abaixo de -35 dB podem gerar cortes. Não há limite de duração nem cortes por mudança de arranjo. Transições sem pausa podem permanecer juntas; o original é preservado.
 
 Correção: capítulos usam seus horários reais para cortar e preservar os títulos,
 inclusive medleys e agradecimentos. Cortes acústicos não herdam nomes por índice
@@ -16,7 +18,7 @@ O instalador é para Windows 64 bits. Como ainda não possui assinatura digital
 comercial, o Windows pode exibir um aviso do SmartScreen. O checksum SHA-256
 está disponível na [página de versões](https://github.com/fabianoabrao-oss/youfa-desktop/releases).
 
-O instalador 2.2.2 atualiza a versão anterior e preserva o token AudD protegido
+O instalador 2.2.3 atualiza a versão anterior e preserva o token AudD protegido
 no perfil do usuário do Windows.
 
 Aplicativo local para Windows que extrai áudio de URLs do YouTube para uma pasta escolhida pelo usuário.
@@ -28,8 +30,8 @@ Recursos:
 - separação por capítulos/timestamps;
 - separação experimental por pausas de silêncio;
 - identificação gratuita por metadados do YouTube e capítulos;
-- escolha entre manter o arquivo inteiro ou separar por mudanças acústicas;
-- na separação bem-sucedida, mantém somente as faixas e remove o arquivo integral temporário;
+- escolha entre manter o arquivo inteiro ou separar por pausas de áudio;
+- com capítulos, remove o arquivo integral temporário após separar; sem capítulos, preserva o original para conferência;
 - se a separação falhar, preserva o arquivo inteiro e mostra um acesso à pasta de destino;
 - consulta opcional ao AudD, desativada por padrão e executada somente quando marcada;
 - token AudD protegido pelo DPAPI do Windows;

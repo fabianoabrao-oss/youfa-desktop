@@ -19,10 +19,9 @@ from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlparse
 
 import yt_dlp
-import numpy as np
 
 APP_NAME = "YouFA"
-APP_VERSION = "2.2.2"
+APP_VERSION = "2.2.3"
 AUDD_SIGNUP_URL = "https://dashboard.audd.io/"
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".flac", ".wav", ".opus"}
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "YouTubeAudioOrganizer" / "audd_token.bin"
@@ -361,6 +360,11 @@ class AudioApp(tk.Tk):
             with yt_dlp.YoutubeDL(opts) as ydl: info = ydl.extract_info(url, download=True)
             if self.cancel_event.is_set(): raise RuntimeError("Operação cancelada")
             files = self._new_audio_files(folder, before)
+            # A preserved full file can be reused on a later attempt with the same URL.
+            source_ids = {str(entry.get("id")) for entry in self._flatten_info(info) if entry.get("id")}
+            for path in folder.iterdir():
+                if path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS and any(path.stem.endswith(f"[{video_id}]") for video_id in source_ids):
+                    if path.resolve() not in files: files.append(path.resolve())
             if split_mode == "Separar por faixas":
                 separated = []
                 for audio in files:
@@ -368,7 +372,7 @@ class AudioApp(tk.Tk):
                     if entry and entry.get("chapters"):
                         tracks = self._split_chapters(audio, ffmpeg, entry)
                     else:
-                        self._emit("log", "Sem capítulos: separação acústica experimental; nomes não serão inferidos pela ordem.")
+                        self._emit("log", "Sem capítulos: separação experimental por pausas, sem cortes forçados; o arquivo inteiro será preservado.")
                         tracks = self._split_acoustically(audio, ffmpeg)
                     if tracks:
                         self._split_outputs.update(tracks)
@@ -493,77 +497,73 @@ class AudioApp(tk.Tk):
             while target.exists() and target != source: target = source.with_name(f"{number:02d} - {label} ({suffix}){source.suffix.lower()}"); suffix += 1
             if target != source: source.rename(target)
             self._emit("log", f"Salvo: {target.name}")
-    def _acoustic_features(self, audio, ffmpeg):
-        """Extrai um vetor compacto por segundo sem enviar o áudio para fora."""
-        rate, frame_bytes = 11025, 11025 * 2
-        process = subprocess.Popen([
-            str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(audio),
-            "-vn", "-ac", "1", "-ar", str(rate), "-f", "s16le", "-",
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW)
-        rows = []
-        while True:
-            raw = process.stdout.read(frame_bytes)
-            if len(raw) < frame_bytes:
-                break
-            signal = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
-            spectrum = np.abs(np.fft.rfft(signal * np.hanning(signal.size))) + 1e-9
-            edges = np.geomspace(2, spectrum.size, 34).astype(int)
-            bands = [np.log1p(np.mean(spectrum[a:b])) for a, b in zip(edges, edges[1:]) if b > a]
-            rows.append(bands + [float(np.sqrt(np.mean(signal * signal))) * 10.0])
-        process.stdout.close(); process.wait()
-        if process.returncode or len(rows) < 90:
-            return None
-        return np.asarray(rows, dtype=np.float32)
+    @staticmethod
+    def _pause_boundaries(log, duration):
+        """Only sustained quiet pauses justify an automatic, experimental cut."""
+        pauses = []
+        start = None
+        for event, value in re.findall(r"silence_(start|end):\s*([0-9.]+)", log):
+            if event == "start":
+                start = float(value)
+            elif start is not None:
+                end = float(value)
+                if end > start:
+                    if pauses and start - pauses[-1][1] <= 0.15:
+                        pauses[-1] = (pauses[-1][0], end)
+                    else:
+                        pauses.append((start, end))
+                start = None
+        # Prefer the longest pause when several are too close to be separate tracks.
+        selected = []
+        for start, end in sorted(pauses, key=lambda span: span[1] - span[0], reverse=True):
+            point = (start + end) / 2
+            if end - start >= 0.8 and 75 <= point <= duration - 75:
+                if all(abs(point - other) >= 75 for other in selected):
+                    selected.append(point)
+        return sorted(selected)
 
     def _split_acoustically(self, audio, ffmpeg):
-        self._emit("status", f"Analisando mudanças acústicas em {audio.name}...")
-        features = self._acoustic_features(audio, ffmpeg)
-        if features is None:
-            self._emit("log", f"Não foi possível analisar {audio.name}; arquivo inteiro preservado.")
-            return []
-        features = (features - np.median(features, axis=0)) / (np.std(features, axis=0) + 1e-8)
-        window = 12; novelty = np.zeros(len(features), dtype=np.float32)
-        for index in range(window, len(features) - window):
-            novelty[index] = np.linalg.norm(features[index:index + window].mean(0) - features[index - window:index].mean(0))
-        kernel_x = np.arange(-9, 10); kernel = np.exp(-(kernel_x ** 2) / 18.0); kernel /= kernel.sum()
-        novelty = np.convolve(novelty, kernel, mode="same")
-        threshold = float(np.percentile(novelty, 70)); candidates = []
-        for index in range(46, len(novelty) - 46):
-            if novelty[index] >= threshold and novelty[index] == np.max(novelty[index - 8:index + 9]):
-                if not candidates or index - candidates[-1] >= 120:
-                    candidates.append(index)
-                elif novelty[index] > novelty[candidates[-1]]:
-                    candidates[-1] = index
-        while True:
-            limits = [0] + candidates + [len(features)]
-            oversized = [(a, b) for a, b in zip(limits, limits[1:]) if b - a > 390]
-            if not oversized:
-                break
-            for start, end in oversized:
-                lo, hi = start + 105, end - 105
-                if lo < hi:
-                    candidates.append(int(lo + np.argmax(novelty[lo:hi])))
-            candidates.sort()
-        boundaries = [0] + candidates + [len(features)]
-        segments = [(a, b) for a, b in zip(boundaries, boundaries[1:]) if b - a >= 75]
-        if len(segments) < 2:
-            self._emit("log", f"Nenhum corte confiável em {audio.name}; arquivo inteiro preservado.")
-            return []
-        target = audio.parent / f"{safe_part(audio.stem, 140)} - faixas"; target.mkdir(exist_ok=True)
+        self._emit("status", f"Procurando pausas entre músicas em {audio.name}...")
         created = []
         try:
-            for index, (start, end) in enumerate(segments, 1):
+            duration = self._duration(audio, ffmpeg)
+            if not duration: raise ValueError("Duração do áudio indisponível")
+            process = subprocess.Popen([
+                str(ffmpeg), "-hide_banner", "-nostats", "-i", str(audio),
+                "-vn", "-af", "silencedetect=noise=-35dB:d=0.5", "-f", "null", "-",
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                errors="replace", creationflags=subprocess.CREATE_NO_WINDOW)
+            while True:
+                if self.cancel_event.is_set():
+                    process.kill(); process.communicate()
+                    raise RuntimeError("Operação cancelada")
+                try:
+                    _, log = process.communicate(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            if process.returncode: raise RuntimeError("Não foi possível analisar as pausas")
+            cuts = self._pause_boundaries(log, duration)
+            if not cuts:
+                self._emit("log", "Nenhuma pausa confiável para separar; arquivo inteiro preservado. Não foram forçados cortes.")
+                return []
+            boundaries = [0.0] + cuts + [duration]
+            target = audio.parent / f"{safe_part(audio.stem, 140)} - faixas" / uuid.uuid4().hex[:8]
+            target.mkdir(parents=True)
+            for index, (start, end) in enumerate(zip(boundaries, boundaries[1:]), 1):
                 if self.cancel_event.is_set(): raise RuntimeError("Operação cancelada")
                 dest = target / f"{index:02d} - faixa{audio.suffix.lower()}"
-                subprocess.run([str(ffmpeg), "-y", "-hide_banner", "-loglevel", "error", "-ss", str(start), "-to", str(end), "-i", str(audio), "-map", "0:a:0", "-c", "copy", str(dest)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 created.append(dest.resolve())
-        except Exception:
-            for path in created:
-                path.unlink(missing_ok=True)
-            self._emit("log", f"A separação falhou; arquivo inteiro preservado: {audio}")
+                subprocess.run([str(ffmpeg), "-y", "-hide_banner", "-loglevel", "error",
+                    "-ss", str(start), "-i", str(audio), "-t", str(end - start),
+                    "-map", "0:a:0", "-c", "copy", str(dest)], check=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                self._emit("log", f"Trecho {index:02d}: {start:.3f}–{end:.3f}s")
+        except Exception as exc:
+            for path in created: path.unlink(missing_ok=True)
+            self._emit("log", f"Separação interrompida: {exc}; arquivo inteiro preservado: {audio}")
             return []
-        audio.unlink()
-        self._emit("log", f"{len(created)} faixas separadas. Arquivo inteiro temporário removido.")
+        self._emit("log", f"{len(created)} trechos separados por pausas (experimental). Confira as transições; músicas sem pausa podem permanecer juntas. Arquivo inteiro preservado: {audio}")
         return created
 
 
