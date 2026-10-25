@@ -31,15 +31,7 @@ Copy-Item -LiteralPath $NodeSource -Destination $BundledNode -Force
 & $VenvPython -m PyInstaller `
     --noconfirm `
     --clean `
-    --onefile `
-    --windowed `
-    --name 'YouFA' `
-    --icon (Join-Path $Root 'assets\youfa.ico') `
-    --collect-all yt_dlp `
-    --collect-all yt_dlp_ejs `
-    --add-binary "$BundledFfmpeg;." `
-    --add-binary "$BundledNode;." `
-    --add-data "$(Join-Path $Root 'assets\youfa.ico');." `
-    --add-data "$(Join-Path $Root 'CREDITS.txt');." `
-    (Join-Path $Root 'app.py')
+    --workpath (Join-Path $Root 'build-current') `
+    --distpath (Join-Path $Root 'dist') `
+    (Join-Path $Root 'YouFA.spec')
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar o executavel.' }

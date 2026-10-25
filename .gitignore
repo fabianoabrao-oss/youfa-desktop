@@ -5,6 +5,7 @@ __pycache__/
 
 # Build and installers
 build/
+build-current/
 dist/
 installer-dist/
 runtime/
