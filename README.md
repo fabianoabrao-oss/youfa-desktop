@@ -4,7 +4,9 @@ Seu organizador de faixas de áudio — by Fabiano Abrão.
 
 ## Download para Windows
 
-Versão 2.2.2 preparada localmente; ainda não publicada no GitHub.
+**[Baixar o instalador YouFA 2.2.2 para Windows](https://github.com/fabianoabrao-oss/youfa-desktop/releases/download/v2.2.2/YouFA-Setup-2.2.2.exe)**
+
+[Ver todas as versões e downloads](https://github.com/fabianoabrao-oss/youfa-desktop/releases)
 
 Correção: capítulos usam seus horários reais para cortar e preservar os títulos,
 inclusive medleys e agradecimentos. Cortes acústicos não herdam nomes por índice
